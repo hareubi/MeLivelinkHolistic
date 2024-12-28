@@ -1,7 +1,7 @@
 import cv2
 import os
 import mediapipe as mp
-from mediapipe.python.solutions import face_mesh, drawing_utils, drawing_styles
+from mediapipe.python.solutions import holistic, drawing_utils, drawing_styles
 import numpy as np
 import socket
 import threading
@@ -9,8 +9,9 @@ import time
 import math
 import transforms3d
 import open3d as o3d
+import struct
 
-from pylivelinkface import PyLiveLinkFace, FaceBlendShape
+from PyLiveLink.pylivelink import PyLiveLink, FaceBlendShape
 
 from mefamo.utils.drawing import Drawing
 from mefamo.blendshapes.blendshape_calculator import BlendshapeCalculator
@@ -69,20 +70,16 @@ def calculate_rotation(face_landmarks, pcf: PCF, image_shape):
 
    
 class Mefamo():
-    def __init__(self, input = 0, ip = '127.0.0.1', port = 11111, show_3d = False, hide_image = False, show_debug = False) -> None:
+    def __init__(self, input = 0, ip = '127.0.0.0', port = 54321, show_3d = False, hide_image = False, show_debug = False) -> None:
 
         self.input = input
         self.show_image = not hide_image
         self.show_3d = show_3d
         self.show_debug = show_debug
 
-        self.face_mesh = face_mesh.FaceMesh(
-            max_num_faces=1,
-            refine_landmarks=True,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5)
+        self.face_mesh = holistic.Holistic(refine_face_landmarks=True)
 
-        self.live_link_face = PyLiveLinkFace(fps = 30, filter_size = 4)
+        self.live_link_face = PyLiveLink(fps = 30, filter_size = 4)
         self.blendshape_calulator = BlendshapeCalculator()
 
         self.ip = ip
@@ -164,7 +161,7 @@ class Mefamo():
             while True: 
                 with self.lock:
                     if self.got_new_data:                               
-                        s.sendall(self.network_data)
+                        s.send(self.network_data)
                         self.got_new_data = False
                 time.sleep(0.01)
 
@@ -179,9 +176,8 @@ class Mefamo():
         image.flags.writeable = True
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
         face_image_3d = None
-        if results.multi_face_landmarks:
-            for face_landmarks in results.multi_face_landmarks:
-
+        if results.face_landmarks:
+                face_landmarks = results.face_landmarks
                 pose_transform_mat, metric_landmarks, rotation_vector, translation_vector = calculate_rotation(face_landmarks, self.pcf, image.shape)  
                 # draw a 3d image of the face
                 if self.show_3d:
@@ -191,7 +187,7 @@ class Mefamo():
                 drawing_utils.draw_landmarks(
                     image=image,
                     landmark_list=face_landmarks,
-                    connections=face_mesh.FACEMESH_TESSELATION,
+                    connections=holistic.FACEMESH_TESSELATION,
                     landmark_drawing_spec=None,
                     connection_drawing_spec=drawing_styles
                     .get_default_face_mesh_tesselation_style())
@@ -200,7 +196,7 @@ class Mefamo():
                 drawing_utils.draw_landmarks(
                     image=image,
                     landmark_list=face_landmarks,
-                    connections=face_mesh.FACEMESH_CONTOURS,
+                    connections=holistic.FACEMESH_CONTOURS,
                     landmark_drawing_spec=None,
                     connection_drawing_spec=drawing_styles
                     .get_default_face_mesh_contours_style())
@@ -223,7 +219,48 @@ class Mefamo():
                 self.live_link_face.set_blendshape(
                     FaceBlendShape.HeadRoll, roll)
                 self.live_link_face.set_blendshape(FaceBlendShape.HeadYaw, yaw)
+                
 
+        if results.pose_landmarks:
+                pose_landmarks = results.pose_landmarks 
+
+                # draw the pose connection 
+                drawing_utils.draw_landmarks(
+                    image=image,
+                    landmark_list=pose_landmarks,
+                    connections=holistic.POSE_CONNECTIONS,
+                    landmark_drawing_spec=None,
+                    connection_drawing_spec=drawing_styles
+                    .get_default_face_mesh_tesselation_style())
+
+
+        if results.left_hand_landmarks:
+                hand_landmarks = results.left_hand_landmarks
+
+                # draw the hand connection
+                drawing_utils.draw_landmarks(
+                    image=image,
+                    landmark_list=hand_landmarks,
+                    connections=holistic.HAND_CONNECTIONS,
+                    landmark_drawing_spec=None,
+                    connection_drawing_spec=drawing_styles
+                    .get_default_face_mesh_tesselation_style())
+
+
+
+        if results.right_hand_landmarks:
+                hand_landmarks = results.right_hand_landmarks
+
+                # draw the hand connection
+                drawing_utils.draw_landmarks(
+                    image=image,
+                    landmark_list=hand_landmarks,
+                    connections=holistic.HAND_CONNECTIONS,
+                    landmark_drawing_spec=None,
+                    connection_drawing_spec=drawing_styles
+                    .get_default_face_mesh_tesselation_style())
+            
+                
         # Flip the image horizontally for a selfie-view display.
         self.image = cv2.flip(image, 1).astype('uint8')
 

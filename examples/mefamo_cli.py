@@ -7,7 +7,7 @@ if __name__ == "__main__":
                         help='Video source. Can be an integer for webcam or a string for a video file.')
     parser.add_argument('--ip', default='127.0.0.1',
                         help='IP address of the Unreal LiveLink server.')
-    parser.add_argument('--port', default=11111,
+    parser.add_argument('--port', default=54321,
                         help='Port of the Unreal LiveLink server.')
     parser.add_argument('--show_3d', action='store_true',
                         help='Show the 3d face image (projected into a 2d window')
